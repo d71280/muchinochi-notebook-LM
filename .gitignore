@@ -59,3 +59,8 @@ htmlcov/
 
 # OS files
 Thumbs.db
+
+# NotebookLM Skill
+.claude/skills/notebooklm/.venv/
+.claude/skills/notebooklm/data/
+.claude/skills/notebooklm/.git/

@@ -59,6 +59,22 @@ jobs:
           echo "reflection_date=$REFLECTION_DATE" >> $GITHUB_OUTPUT
           echo "Reflection date: $REFLECTION_DATE"
 
+      - name: Setup NotebookLM authentication
+        run: |
+          # Create directory structure
+          mkdir -p .claude/skills/notebooklm/data/browser_state
+
+          # Decode and save state.json
+          echo "${{ secrets.NOTEBOOKLM_STATE_JSON }}" | base64 -d > .claude/skills/notebooklm/data/browser_state/state.json
+
+          # Verify file was created
+          if [ -f ".claude/skills/notebooklm/data/browser_state/state.json" ]; then
+            echo "✅ NotebookLM authentication file created"
+          else
+            echo "❌ Failed to create authentication file"
+            exit 1
+          fi
+
       - name: Run Claude Code Action for Daily Reflection
         id: claude-reflection
         uses: anthropics/claude-code-action@v1
