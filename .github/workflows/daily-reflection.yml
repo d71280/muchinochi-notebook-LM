@@ -67,11 +67,14 @@ jobs:
           # Decode and save state.json
           echo "${{ secrets.NOTEBOOKLM_STATE_JSON }}" | base64 -d > .claude/skills/notebooklm/data/browser_state/state.json
 
-          # Verify file was created
-          if [ -f ".claude/skills/notebooklm/data/browser_state/state.json" ]; then
-            echo "✅ NotebookLM authentication file created"
+          # Decode and save library.json
+          echo "${{ secrets.NOTEBOOKLM_LIBRARY_JSON }}" | base64 -d > .claude/skills/notebooklm/data/library.json
+
+          # Verify files were created
+          if [ -f ".claude/skills/notebooklm/data/browser_state/state.json" ] && [ -f ".claude/skills/notebooklm/data/library.json" ]; then
+            echo "✅ NotebookLM authentication and library files created"
           else
-            echo "❌ Failed to create authentication file"
+            echo "❌ Failed to create required files"
             exit 1
           fi
 
