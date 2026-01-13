@@ -36,6 +36,27 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests google-auth google-auth-oauthlib google-auth-httplib2
 
+      - name: Install Xvfb and browser dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            xvfb \
+            libgbm1 \
+            libnss3 \
+            libnspr4 \
+            libatk1.0-0 \
+            libatk-bridge2.0-0 \
+            libcups2 \
+            libdrm2 \
+            libxkbcommon0 \
+            libxcomposite1 \
+            libxdamage1 \
+            libxfixes3 \
+            libxrandr2 \
+            libpango-1.0-0 \
+            libcairo2 \
+            libasound2
+
       - name: Authenticate with Google Cloud
         if: env.NOTEBOOKLM_PROJECT_ID != ''
         run: |
@@ -77,6 +98,15 @@ jobs:
             echo "❌ Failed to create required files"
             exit 1
           fi
+
+      - name: Start Xvfb
+        run: |
+          # Start Xvfb on display :99
+          Xvfb :99 -screen 0 1920x1080x24 > /dev/null 2>&1 &
+          echo "XVFB_PID=$!" >> $GITHUB_ENV
+          echo "DISPLAY=:99" >> $GITHUB_ENV
+          sleep 2
+          echo "✅ Xvfb started on display :99"
 
       - name: Run Claude Code Action for Daily Reflection
         id: claude-reflection
@@ -120,6 +150,8 @@ jobs:
             必要なツール: Skill, Bash, Read, Write, Edit, Glob, Grep
 
           claude_args: '--allowed-tools "Skill,Bash,Read,Write,Edit,Glob,Grep,Task"'
+        env:
+          DISPLAY: :99
 
       - name: Read generated summary
         id: summary
@@ -229,6 +261,14 @@ jobs:
             reports/daily-reflection-${{ steps.date.outputs.reflection_date }}.md
             reports/daily-summary.txt
           retention-days: 90
+
+      - name: Cleanup Xvfb
+        if: always()
+        run: |
+          if [ -n "$XVFB_PID" ]; then
+            kill $XVFB_PID 2>/dev/null || true
+            echo "✅ Xvfb stopped"
+          fi
 
       - name: Notification on failure
         if: failure()
