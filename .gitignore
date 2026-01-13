@@ -1,0 +1,61 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Credentials
+*.json
+!package.json
+!package-lock.json
+*.pem
+*.key
+.env
+.env.local
+secrets/
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+/tmp/
+/temp/
+
+# Google Cloud
+/gcloud-key.json
+/service-account-key.json
+
+# Reports (keep directory, ignore contents except .gitkeep)
+/reports/*
+!/reports/.gitkeep
+
+# Sources (keep directory structure)
+/sources/*.pdf
+/sources/*.docx
+/sources/*.doc
+
+# Node modules (if using JavaScript tools)
+node_modules/
+
+# Coverage reports
+htmlcov/
+.coverage
+.pytest_cache/
+
+# OS files
+Thumbs.db

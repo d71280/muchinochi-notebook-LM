@@ -1,0 +1,217 @@
+name: Daily Reflection with Notebook LM
+
+on:
+  # 毎日朝6時（JST = UTC 21:00前日）に実行
+  schedule:
+    - cron: '0 21 * * *'
+
+  # 手動トリガー（テスト用）
+  workflow_dispatch:
+    inputs:
+      date:
+        description: '振り返りの日付（YYYY-MM-DD形式、空欄で昨日）'
+        required: false
+        default: ''
+
+jobs:
+  daily-reflection:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests google-auth google-auth-oauthlib google-auth-httplib2
+
+      - name: Authenticate with Google Cloud
+        if: env.NOTEBOOKLM_PROJECT_ID != ''
+        run: |
+          # Google Cloud認証の設定
+          if [ -n "${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}" ]; then
+            echo '${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}' > /tmp/gcloud-key.json
+            export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcloud-key.json
+          fi
+        env:
+          NOTEBOOKLM_PROJECT_ID: ${{ secrets.NOTEBOOKLM_PROJECT_ID }}
+
+      - name: Set reflection date
+        id: date
+        run: |
+          if [ -n "${{ github.event.inputs.date }}" ]; then
+            REFLECTION_DATE="${{ github.event.inputs.date }}"
+          else
+            # 昨日の日付を取得（JSTで計算）
+            REFLECTION_DATE=$(TZ='Asia/Tokyo' date -d 'yesterday' '+%Y-%m-%d' 2>/dev/null || TZ='Asia/Tokyo' date -v-1d '+%Y-%m-%d')
+          fi
+          echo "reflection_date=$REFLECTION_DATE" >> $GITHUB_OUTPUT
+          echo "Reflection date: $REFLECTION_DATE"
+
+      - name: Run Claude Code Action for Daily Reflection
+        id: claude-reflection
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            WORKFLOW: Daily Reflection for 秋山 大輝
+            DATE: ${{ steps.date.outputs.reflection_date }}
+
+            # 秋山 大輝の1日の振り返り
+
+            NotebookLMを使用して、${{ steps.date.outputs.reflection_date }}の活動を振り返る詳細なレポートを生成してください。
+
+            ## タスク
+
+            1. **NotebookLMスキルの実行**
+               - `/notebooklm` スキルを使用して、sources/ ディレクトリ内のドキュメントを分析
+               - 日付: ${{ steps.date.outputs.reflection_date }}
+               - 以下の質問に対する詳細な回答を取得：
+                 * この日の主な活動や成果は何でしたか？
+                 * 重要な決定や学びはありましたか？
+                 * 進行中のプロジェクトの状況は？
+                 * 明日以降のアクションアイテムは？
+
+            2. **レポート生成**
+               - 詳細なマークダウンレポートを `reports/daily-reflection-${{ steps.date.outputs.reflection_date }}.md` に生成
+               - 以下のセクションを含める：
+                 * 📅 日付と概要
+                 * 🎯 主な成果
+                 * 📝 重要な学び
+                 * 🔄 進行中のタスク
+                 * ✅ 完了したタスク
+                 * 📌 次のアクションアイテム
+
+            3. **サマリー生成**
+               - Google Chat通知用の簡潔なサマリー（200-300文字）を `reports/daily-summary.txt` に生成
+               - 絵文字を使って読みやすく
+
+            必要なツール: Skill, Bash, Read, Write, Edit, Glob, Grep
+
+          claude_args: '--allowed-tools "Skill,Bash,Read,Write,Edit,Glob,Grep,Task"'
+
+      - name: Read generated summary
+        id: summary
+        run: |
+          if [ -f "reports/daily-summary.txt" ]; then
+            SUMMARY=$(cat reports/daily-summary.txt)
+            # GitHubの環境変数としてエクスポート（改行をエスケープ）
+            echo "summary<<EOF" >> $GITHUB_OUTPUT
+            echo "$SUMMARY" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "summary=振り返りレポートを生成しました。詳細はリポジトリをご確認ください。" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Notify to Google Chat
+        if: always()
+        run: |
+          WEBHOOK_URL="${{ secrets.GOOGLE_CHAT_WEBHOOK_URL }}"
+          DATE="${{ steps.date.outputs.reflection_date }}"
+          SUMMARY="${{ steps.summary.outputs.summary }}"
+          REPO_URL="https://github.com/${{ github.repository }}"
+          RUN_URL="$REPO_URL/actions/runs/${{ github.run_id }}"
+
+          # Google Chat用のメッセージを構築
+          cat > /tmp/chat-message.json <<EOF
+          {
+            "text": "📊 *秋山 大輝の1日の振り返り*",
+            "cards": [{
+              "header": {
+                "title": "Daily Reflection: ${DATE}",
+                "subtitle": "Notebook LM によるレポート",
+                "imageUrl": "https://www.gstatic.com/images/branding/product/2x/googleg_48dp.png"
+              },
+              "sections": [{
+                "widgets": [{
+                  "textParagraph": {
+                    "text": "${SUMMARY}"
+                  }
+                }, {
+                  "buttons": [{
+                    "textButton": {
+                      "text": "📄 詳細レポートを見る",
+                      "onClick": {
+                        "openLink": {
+                          "url": "${REPO_URL}/blob/main/reports/daily-reflection-${DATE}.md"
+                        }
+                      }
+                    }
+                  }, {
+                    "textButton": {
+                      "text": "🔍 ワークフロー実行を見る",
+                      "onClick": {
+                        "openLink": {
+                          "url": "${RUN_URL}"
+                        }
+                      }
+                    }
+                  }]
+                }]
+              }]
+            }]
+          }
+          EOF
+
+          # Google Chatに送信
+          curl -X POST \
+            -H 'Content-Type: application/json' \
+            -d @/tmp/chat-message.json \
+            "$WEBHOOK_URL"
+
+          echo "✅ Google Chat に通知を送信しました"
+
+      - name: Commit and push report
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+          git add reports/
+
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Add daily reflection for ${{ steps.date.outputs.reflection_date }}
+
+          Generated by GitHub Actions
+
+          Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>"
+            git push
+            echo "✅ レポートをコミットしました"
+          fi
+
+      - name: Upload report artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: daily-reflection-${{ steps.date.outputs.reflection_date }}
+          path: |
+            reports/daily-reflection-${{ steps.date.outputs.reflection_date }}.md
+            reports/daily-summary.txt
+          retention-days: 90
+
+      - name: Notification on failure
+        if: failure()
+        run: |
+          WEBHOOK_URL="${{ secrets.GOOGLE_CHAT_WEBHOOK_URL }}"
+
+          curl -X POST \
+            -H 'Content-Type: application/json' \
+            -d '{"text": "❌ *Daily Reflection Failed*\n\n日次振り返りの生成に失敗しました。\n\nワークフロー: ${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
+            "$WEBHOOK_URL"
+
+          exit 1
+
+env:
+  NOTEBOOKLM_PROJECT_ID: ${{ secrets.NOTEBOOKLM_PROJECT_ID }}
+  NOTEBOOKLM_LOCATION: ${{ secrets.NOTEBOOKLM_LOCATION || 'us-central1' }}
+  GOOGLE_APPLICATION_CREDENTIALS: /tmp/gcloud-key.json
