@@ -16,6 +16,9 @@ on:
 jobs:
   daily-reflection:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write
 
     steps:
       - name: Checkout repository
@@ -189,9 +192,18 @@ jobs:
             echo "✅ レポートをコミットしました"
           fi
 
+      - name: Check if reports exist
+        id: check_reports
+        run: |
+          if [ -f "reports/daily-reflection-${{ steps.date.outputs.reflection_date }}.md" ] || [ -f "reports/daily-summary.txt" ]; then
+            echo "reports_exist=true" >> $GITHUB_OUTPUT
+          else
+            echo "reports_exist=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Upload report artifacts
         uses: actions/upload-artifact@v4
-        if: always()
+        if: steps.check_reports.outputs.reports_exist == 'true'
         with:
           name: daily-reflection-${{ steps.date.outputs.reflection_date }}
           path: |
