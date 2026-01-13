@@ -175,6 +175,9 @@ jobs:
           REPO_URL="https://github.com/${{ github.repository }}"
           RUN_URL="$REPO_URL/actions/runs/${{ github.run_id }}"
 
+          # Escape summary for JSON (replace newlines and quotes)
+          SUMMARY_ESCAPED=$(echo "$SUMMARY" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | tr '\n' ' ')
+
           # Google Chat用のメッセージを構築
           cat > /tmp/chat-message.json <<EOF
           {
@@ -188,7 +191,7 @@ jobs:
               "sections": [{
                 "widgets": [{
                   "textParagraph": {
-                    "text": "${SUMMARY}"
+                    "text": "${SUMMARY_ESCAPED}"
                   }
                 }, {
                   "buttons": [{
