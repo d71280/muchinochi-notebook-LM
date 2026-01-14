@@ -40,9 +40,8 @@ secrets/
 /gcloud-key.json
 /service-account-key.json
 
-# Reports (keep directory, ignore contents except .gitkeep)
-/reports/*
-!/reports/.gitkeep
+# Reports (keep all daily reflections)
+# /reports/* は削除 - レポートファイルをコミットできるようにする
 
 # Sources (keep directory structure)
 /sources/*.pdf
