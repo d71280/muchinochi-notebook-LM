@@ -28,6 +28,55 @@ python scripts/auth_manager.py status  # ModuleNotFoundError!
 
 ### Authentication Issues
 
+#### CI/CD Authentication Timeout
+```
+❌ NotebookLM接続エラー (2026-01-14)
+CI/CD環境でNotebookLMへの接続がタイムアウトしたため、本日の振り返りレポートを自動生成できませんでした。
+```
+
+**Common causes:**
+1. **Expired cookies** - `NOTEBOOKLM_STATE_JSON` secret contains outdated session
+2. **Google detection** - Google may block automated CI/CD environments
+3. **Network latency** - CI/CD environments are slower than local machines
+
+**Solution:**
+
+1. **Refresh authentication cookies:**
+```bash
+# Run locally to get fresh cookies
+python scripts/run.py auth_manager.py setup
+
+# Export the state.json to base64
+cat ~/.claude/skills/notebooklm/data/browser_state/state.json | base64 -w 0
+
+# Update GitHub secret NOTEBOOKLM_STATE_JSON with the output
+# Settings → Secrets and variables → Actions → NOTEBOOKLM_STATE_JSON
+```
+
+2. **Verify library.json is up to date:**
+```bash
+# Export library.json to base64
+cat ~/.claude/skills/notebooklm/data/library.json | base64 -w 0
+
+# Update GitHub secret NOTEBOOKLM_LIBRARY_JSON with the output
+```
+
+3. **Test locally with CI mode:**
+```bash
+# Simulate CI/CD environment
+export CI=true
+export GITHUB_ACTIONS=true
+export DISPLAY=:99
+
+# Start Xvfb (if not running)
+Xvfb :99 -screen 0 1920x1080x24 &
+
+# Test the skill
+python scripts/run.py ask_question.py --question "Test" --notebook-id default
+```
+
+**Note:** CI/CD mode automatically increases timeouts (60s page load, 3min query timeout)
+
 #### Not authenticated error
 ```
 Error: Not authenticated. Please run auth setup first.

@@ -22,7 +22,15 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from auth_manager import AuthManager
 from notebook_manager import NotebookLibrary
-from config import QUERY_INPUT_SELECTORS, RESPONSE_SELECTORS
+from config import (
+    QUERY_INPUT_SELECTORS,
+    RESPONSE_SELECTORS,
+    PAGE_LOAD_TIMEOUT_MS,
+    ELEMENT_WAIT_TIMEOUT_MS,
+    NAVIGATION_TIMEOUT_MS,
+    QUERY_TIMEOUT_SECONDS,
+    IS_CI_CD
+)
 from browser_utils import BrowserFactory, StealthUtils
 
 
@@ -57,6 +65,8 @@ def ask_notebooklm(question: str, notebook_url: str, headless: bool = True) -> s
 
     print(f"💬 Asking: {question}")
     print(f"📚 Notebook: {notebook_url}")
+    if IS_CI_CD:
+        print(f"  ℹ️  CI/CD mode: Extended timeouts enabled")
 
     playwright = None
     context = None
@@ -74,30 +84,46 @@ def ask_notebooklm(question: str, notebook_url: str, headless: bool = True) -> s
         # Navigate to notebook
         page = context.new_page()
         print("  🌐 Opening notebook...")
-        page.goto(notebook_url, wait_until="domcontentloaded")
+        try:
+            page.goto(notebook_url, wait_until="domcontentloaded", timeout=PAGE_LOAD_TIMEOUT_MS)
+        except Exception as e:
+            print(f"  ⚠️  Page load warning: {e}")
+            # Continue anyway - might still work
 
         # Wait for NotebookLM
-        page.wait_for_url(re.compile(r"^https://notebooklm\.google\.com/"), timeout=10000)
+        print(f"  ⏳ Waiting for NotebookLM to load (timeout: {NAVIGATION_TIMEOUT_MS/1000}s)...")
+        try:
+            page.wait_for_url(re.compile(r"^https://notebooklm\.google\.com/"), timeout=NAVIGATION_TIMEOUT_MS)
+        except Exception as e:
+            print(f"  ❌ Navigation timeout or redirect to login: {e}")
+            print(f"  Current URL: {page.url}")
+            if "accounts.google.com" in page.url:
+                print("  ⚠️  Redirected to Google login - authentication may be expired")
+                print("  💡 Tip: Update NOTEBOOKLM_STATE_JSON secret with fresh cookies")
+            raise
 
         # Wait for query input (MCP approach)
-        print("  ⏳ Waiting for query input...")
+        print(f"  ⏳ Waiting for query input (timeout: {ELEMENT_WAIT_TIMEOUT_MS/1000}s)...")
         query_element = None
 
-        for selector in QUERY_INPUT_SELECTORS:
+        for i, selector in enumerate(QUERY_INPUT_SELECTORS):
             try:
                 query_element = page.wait_for_selector(
                     selector,
-                    timeout=10000,
+                    timeout=ELEMENT_WAIT_TIMEOUT_MS,
                     state="visible"  # Only check visibility, not disabled!
                 )
                 if query_element:
-                    print(f"  ✓ Found input: {selector}")
+                    print(f"  ✅ Found input using selector {i+1}/{len(QUERY_INPUT_SELECTORS)}: {selector[:50]}...")
                     break
-            except:
+            except Exception as e:
+                print(f"  ⚠️  Selector {i+1}/{len(QUERY_INPUT_SELECTORS)} failed: {selector[:50]}...")
                 continue
 
         if not query_element:
-            print("  ❌ Could not find query input")
+            print("  ❌ Could not find query input after trying all selectors")
+            print(f"  Current URL: {page.url}")
+            print("  💡 Tip: NotebookLM UI may have changed, or notebook is not accessible")
             return None
 
         # Type question (human-like, fast)
@@ -115,12 +141,12 @@ def ask_notebooklm(question: str, notebook_url: str, headless: bool = True) -> s
         StealthUtils.random_delay(500, 1500)
 
         # Wait for response (MCP approach: poll for stable text)
-        print("  ⏳ Waiting for answer...")
+        print(f"  ⏳ Waiting for answer (timeout: {QUERY_TIMEOUT_SECONDS}s)...")
 
         answer = None
         stable_count = 0
         last_text = None
-        deadline = time.time() + 120  # 2 minutes timeout
+        deadline = time.time() + QUERY_TIMEOUT_SECONDS
 
         while time.time() < deadline:
             # Check if NotebookLM is still thinking (most reliable indicator)
@@ -159,7 +185,9 @@ def ask_notebooklm(question: str, notebook_url: str, headless: bool = True) -> s
             time.sleep(1)
 
         if not answer:
-            print("  ❌ Timeout waiting for answer")
+            print(f"  ❌ Timeout waiting for answer after {QUERY_TIMEOUT_SECONDS}s")
+            print(f"  Current URL: {page.url}")
+            print("  💡 Tip: NotebookLM may be slow or overloaded. Try again later.")
             return None
 
         print("  ✅ Got answer!")

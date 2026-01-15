@@ -38,7 +38,20 @@ BROWSER_ARGS = [
 
 USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
 
-# Timeouts
+# Timeouts (in milliseconds for Playwright, unless noted)
 LOGIN_TIMEOUT_MINUTES = 10
 QUERY_TIMEOUT_SECONDS = 120
-PAGE_LOAD_TIMEOUT = 30000
+PAGE_LOAD_TIMEOUT_MS = 30000  # 30 seconds
+ELEMENT_WAIT_TIMEOUT_MS = 10000  # 10 seconds
+NAVIGATION_TIMEOUT_MS = 30000  # 30 seconds
+
+# CI/CD adjustments - increase timeouts for slower environments
+import os
+IS_CI_CD = os.getenv('CI') == 'true' or os.getenv('GITHUB_ACTIONS') == 'true'
+
+if IS_CI_CD:
+    # CI/CD environments are slower (Xvfb, network latency, etc.)
+    PAGE_LOAD_TIMEOUT_MS = 60000  # 60 seconds
+    ELEMENT_WAIT_TIMEOUT_MS = 30000  # 30 seconds
+    NAVIGATION_TIMEOUT_MS = 60000  # 60 seconds
+    QUERY_TIMEOUT_SECONDS = 180  # 3 minutes
