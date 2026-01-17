@@ -1,11 +1,11 @@
 name: Daily Reflection with Notebook LM
 
 on:
-  # テスト用: 10分ごとに実行
-  schedule:
-    - cron: '*/10 * * * *'
+  # スケジュール無効化（ローカル実行に移行）
+  # schedule:
+  #   - cron: '0 21 * * *'
 
-  # 手動トリガー（テスト用）
+  # 手動トリガーのみ有効
   workflow_dispatch:
     inputs:
       date:
